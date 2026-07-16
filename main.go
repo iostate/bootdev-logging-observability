@@ -30,7 +30,7 @@ func main() {
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
 
-	logger, err := initializeLogger()
+	logger, closeLogger, err := initializeLogger()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 		return 1
@@ -53,28 +53,49 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 	defer cancel()
 
 	if err := s.shutdown(shutdownCtx); err != nil {
+		if closeLogger != nil {
+			if err := closeLogger(); err != nil {
+				fmt.Fprintf(os.Stderr, err.Error())
+			}
+		}
 		return 1
 	}
 	if serverErr != nil {
 		log.Printf("server error: %v\n", serverErr)
+		if closeLogger != nil {
+			if err := closeLogger(); err != nil {
+				fmt.Fprintf(os.Stderr, err.Error())
+			}
+		}
 		return 1
 	}
+
 	return 0
 }
 
-func initializeLogger() (*log.Logger, error) {
+type closeFunc func() error
+
+func initializeLogger() (*log.Logger, closeFunc, error) {
 	logFile := os.Getenv("LINKO_LOG_FILE")
 	if logFile == "" {
 		fmt.Println("No LINKO_LOG_FILE env variable found")
-		return log.New(os.Stderr, "", log.LstdFlags), nil
+		return log.New(os.Stderr, "", log.LstdFlags), func() error { return nil }, nil
 	}
 
 	fmt.Println("LINKO_LOG_FILE env variable found")
 	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	bufferedFile := bufio.NewWriterSize(f, 8192)
+
+	close := func() error {
+		if err := bufferedFile.Flush(); err != nil {
+			return err
+		}
+		return f.Close()
+	}
 	multiWriter := io.MultiWriter(os.Stderr, bufferedFile)
-	return log.New(multiWriter, "", log.LstdFlags), nil
+	return log.New(multiWriter, "", log.LstdFlags), close, nil
 }
