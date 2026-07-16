@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -13,36 +15,32 @@ import (
 )
 
 func main() {
-	f, err := os.OpenFile("linko.access.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-
-	// Standard logger, DEBUG: prefix to STDERR
-	var logger = log.New(os.Stderr, "DEBUG: ", log.LstdFlags)
-
-	// Access logger, INFO: prefix writes to file "linko.access.log"
-	accessLogger := log.New(f, "INFO: ", log.LstdFlags)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	httpPort := flag.Int("port", 8899, "port to listen on")
 	dataDir := flag.String("data", "./data", "directory to store data")
 	flag.Parse()
 
-	status := run(ctx, cancel, *httpPort, *dataDir, logger, accessLogger)
+	status := run(ctx, cancel, *httpPort, *dataDir)
 	cancel()
 
 	os.Exit(status)
 }
 
-func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string, logger, accessLogger *log.Logger) int {
+func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
+
+	logger, err := initializeLogger()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, err.Error())
+		return 1
+	}
+
 	st, err := store.New(dataDir, logger)
 	if err != nil {
 		log.Printf("failed to create store: %v\n", err)
 		return 1
 	}
-	s := newServer(*st, httpPort, cancel, logger, accessLogger)
+	s := newServer(*st, httpPort, cancel, logger)
 	var serverErr error
 	go func() {
 		serverErr = s.start()
@@ -61,4 +59,20 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 		return 1
 	}
 	return 0
+}
+
+func initializeLogger() (*log.Logger, error) {
+	logFile := os.Getenv("LINKO_LOG_FILE")
+	if logFile == "" {
+		fmt.Println("No LINKO_LOG_FILE env variable found")
+		return log.New(os.Stderr, "", log.LstdFlags), nil
+	}
+
+	fmt.Println("LINKO_LOG_FILE env variable found")
+	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		return nil, err
+	}
+	multiWriter := io.MultiWriter(os.Stderr, f)
+	return log.New(multiWriter, "", log.LstdFlags), nil
 }

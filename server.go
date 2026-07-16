@@ -19,19 +19,19 @@ type server struct {
 	logger     *log.Logger
 }
 
-func newServer(store store.Store, port int, cancel context.CancelFunc, logger, accessLogger *log.Logger) *server {
+func newServer(store store.Store, port int, cancel context.CancelFunc, logger *log.Logger) *server {
 	mux := http.NewServeMux()
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: requestLogger(accessLogger)(mux), // accessLogger for server/request logs
+		Handler: requestLogger(logger)(mux),
 	}
 
 	s := &server{
 		httpServer: srv,
 		store:      store,
 		cancel:     cancel,
-		logger:     logger, // regular logger, DEBUG: to STDERR, for shutdown messages
+		logger:     logger,
 	}
 
 	mux.HandleFunc("GET /", s.handlerIndex)
