@@ -5,7 +5,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -34,6 +33,9 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 		return 1
+	}
+	if closeLogger != nil {
+		defer closeLogger()
 	}
 
 	st, err := store.New(dataDir, logger)
@@ -80,16 +82,18 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 	if logFile == "" {
 		fmt.Println("No LINKO_LOG_FILE env variable found")
 
-		logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-		return logger, func() error { return nil }, nil
+		logger := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})
+		return slog.New(logger), func() error { return nil }, nil
 	}
 
 	fmt.Println("LINKO_LOG_FILE env variable found")
 	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-
 	if err != nil {
 		return nil, nil, err
 	}
+
 	bufferedFile := bufio.NewWriterSize(f, 8192)
 
 	close := func() error {
@@ -98,7 +102,13 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 		}
 		return f.Close()
 	}
-	multiWriter := io.MultiWriter(os.Stderr, bufferedFile)
-	logger := slog.New(slog.NewTextHandler(multiWriter, nil))
+
+	infoLogger := slog.NewTextHandler(bufferedFile, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+	osStdErrLogger := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})
+	logger := slog.New(slog.NewMultiHandler(infoLogger, osStdErrLogger))
 	return logger, close, nil
 }
