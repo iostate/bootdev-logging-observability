@@ -6,7 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -38,7 +38,7 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 	st, err := store.New(dataDir, logger)
 	if err != nil {
-		log.Printf("failed to create store: %v\n", err)
+		logger.Info("failed to create store: %v\n", err)
 		return 1
 	}
 	s := newServer(*st, httpPort, cancel, logger)
@@ -61,7 +61,7 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 		return 1
 	}
 	if serverErr != nil {
-		log.Printf("server error: %v\n", serverErr)
+		logger.Info("server error: %v\n", serverErr)
 		if closeLogger != nil {
 			if err := closeLogger(); err != nil {
 				fmt.Fprintf(os.Stderr, err.Error())
@@ -75,11 +75,13 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 type closeFunc func() error
 
-func initializeLogger() (*log.Logger, closeFunc, error) {
+func initializeLogger() (*slog.Logger, closeFunc, error) {
 	logFile := os.Getenv("LINKO_LOG_FILE")
 	if logFile == "" {
 		fmt.Println("No LINKO_LOG_FILE env variable found")
-		return log.New(os.Stderr, "", log.LstdFlags), func() error { return nil }, nil
+
+		logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+		return logger, func() error { return nil }, nil
 	}
 
 	fmt.Println("LINKO_LOG_FILE env variable found")
@@ -97,5 +99,6 @@ func initializeLogger() (*log.Logger, closeFunc, error) {
 		return f.Close()
 	}
 	multiWriter := io.MultiWriter(os.Stderr, bufferedFile)
-	return log.New(multiWriter, "", log.LstdFlags), close, nil
+	logger := slog.New(slog.NewTextHandler(multiWriter, nil))
+	return logger, close, nil
 }

@@ -1,13 +1,15 @@
 package main
 
-import "log"
+import (
+	"log/slog"
+)
 
 type Application struct {
 	srv    *server
-	logger *log.Logger
+	logger *slog.Logger
 }
 
-func NewApplication(server *server, logger *log.Logger) *Application {
+func NewApplication(server *server, logger *slog.Logger) *Application {
 	return &Application{
 		srv:    server,
 		logger: logger,
