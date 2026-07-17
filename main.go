@@ -103,7 +103,7 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 		return f.Close()
 	}
 
-	infoLogger := slog.NewTextHandler(bufferedFile, &slog.HandlerOptions{
+	infoLogger := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})
 	osStdErrLogger := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
