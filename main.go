@@ -31,7 +31,7 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 	logger, closeLogger, err := initializeLogger()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
 	if closeLogger != nil {
@@ -40,7 +40,7 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 	st, err := store.New(dataDir, logger)
 	if err != nil {
-		logger.Info("failed to create store: %v\n", err)
+		logger.Info("failed to create store", slog.String("error", err.Error()))
 		return 1
 	}
 	s := newServer(*st, httpPort, cancel, logger)
@@ -57,16 +57,16 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 	if err := s.shutdown(shutdownCtx); err != nil {
 		if closeLogger != nil {
 			if err := closeLogger(); err != nil {
-				fmt.Fprintf(os.Stderr, err.Error())
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			}
 		}
 		return 1
 	}
 	if serverErr != nil {
-		logger.Info("server error: %v\n", serverErr)
+		logger.Info("server error\n", "serverErr", serverErr)
 		if closeLogger != nil {
 			if err := closeLogger(); err != nil {
-				fmt.Fprintf(os.Stderr, err.Error())
+				fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			}
 		}
 		return 1
