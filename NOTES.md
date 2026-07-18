@@ -11,5 +11,11 @@ Will the issue resolve itself? Don't even log it.
 # Error
 Include enough information to diagnose the problem.
 - Error msg
-- Stack trace
+- Stack trace 
 - Context (user, permissions, external API)
+
+Use pkg errors to attach stack trace. Use slog.Any with key "error" and error as value. Use a fn which checks for the presence of an error on an error slog key. Give that fn to ReplaceAttr method on the slog text/json handler.
+
+
+# Notes 
+- Some logs are errors, most errors are logs.
