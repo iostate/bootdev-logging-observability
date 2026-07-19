@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -118,9 +119,22 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 	if a.Key == "error" {
+
 		err, ok := a.Value.Any().(error)
 		if !ok {
 			return a
+		}
+		// Slog groups
+		// Check for errors wrapped with pkgerr.WithStackTrace()
+		// that contain a stack trace
+		if stackErr, ok := errors.AsType[stackTracer](err); ok {
+			return slog.GroupAttrs("error", slog.Attr{
+				Key:   "message",
+				Value: slog.StringValue(stackErr.Error()),
+			}, slog.Attr{
+				Key:   "stack_trace",
+				Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
+			})
 		}
 		return slog.String("error", fmt.Sprintf("%+v", err))
 	}
