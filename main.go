@@ -17,6 +17,11 @@ import (
 	linkerr "boot.dev/linko/internal/linkoerr"
 )
 
+type multiError interface {
+	error
+	Unwrap() []error
+}
+
 func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -127,18 +132,30 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 			return a
 		}
 
-		attrs := []slog.Attr{
-			slog.String("message", err.Error()),
+		if _, ok := errors.AsType[multiError](err); ok {
+			return slog.GroupAttrs("errors", errorAttrs(err)...)
 		}
-		attrs = append(attrs, linkerr.Attrs(err)...)
-		// Slog groups
-		// Check for errors wrapped with pkgerr.WithStackTrace()
-		// that contain a stack trace
-		if stackErr, ok := errors.AsType[stackTracer](err); ok {
-			attrs = append(attrs, slog.String("stack_trace", fmt.Sprintf("%+v", stackErr.StackTrace())))
-		}
-		// return slog.String("error", fmt.Sprintf("%+v", err))
-		return slog.GroupAttrs("error", attrs...)
+		return slog.GroupAttrs("error", errorAttrs(err)...)
 	}
 	return a
+}
+
+func errorAttrs(err error) []slog.Attr {
+	if multiErr, ok := errors.AsType[multiError](err); ok {
+		errs := multiErr.Unwrap()
+		children := make([]slog.Attr, 0, len(errs))
+		for i, e := range errs {
+			children = append(children, slog.GroupAttrs(fmt.Sprintf("error_%d", i+1), errorAttrs(e)...))
+		}
+		return children
+	}
+
+	attrs := []slog.Attr{
+		slog.String("message", err.Error()),
+	}
+	attrs = append(attrs, linkerr.Attrs(err)...)
+	if stackErr, ok := errors.AsType[stackTracer](err); ok {
+		attrs = append(attrs, slog.String("stack_trace", fmt.Sprintf("%+v", stackErr.StackTrace())))
+	}
+	return attrs
 }
