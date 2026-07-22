@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"io"
 	"log/slog"
 	"net/http"
@@ -9,8 +10,9 @@ import (
 )
 
 type LogContext struct {
-	Username string
-	Error    error
+	Username  string
+	RequestID string
+	Error     error
 }
 
 type spyReadCloser struct {
@@ -70,6 +72,9 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 				slog.Int("response_status", spyWriter.statusCode),
 				slog.Int("response_body_bytes", spyWriter.bytesWritten),
 			}
+			if logContext.RequestID != "" {
+				attrs = append(attrs, slog.String("request_id", logContext.RequestID))
+			}
 			if logContext.Username != "" {
 				attrs = append(attrs, slog.String("user", logContext.Username))
 			}
@@ -79,6 +84,20 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			logger.Info("Served request", attrs...)
 		})
 	}
+}
+
+func requestIdMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := r.Header.Get("X-Request-Id")
+		if requestID == "" {
+			requestID = rand.Text()
+		}
+		w.Header().Set("X-Request-Id", requestID)
+		if logCtx, ok := r.Context().Value(LogContextKey).(*LogContext); ok {
+			logCtx.RequestID = requestID
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func httpError(ctx context.Context, w http.ResponseWriter, status int, err error) {

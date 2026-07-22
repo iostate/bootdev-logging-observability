@@ -14,6 +14,8 @@ import (
 
 	"boot.dev/linko/internal/build"
 	"boot.dev/linko/internal/store"
+	"github.com/lmittmann/tint"
+	"github.com/mattn/go-isatty"
 
 	linkerr "boot.dev/linko/internal/linkoerr"
 )
@@ -122,13 +124,24 @@ func initializeLogger() (*slog.Logger, closeFunc, error) {
 		return f.Close()
 	}
 
+	enableColor := false
+	// Are we in a TTY environment?
+	isTty := isatty.IsTerminal(os.Stdout.Fd())
+	if isTty == false {
+		enableColor = false
+	}
+	if isatty.IsCygwinTerminal(os.Stdout.Fd()) || isatty.IsTerminal(os.Stdout.Fd()) {
+		enableColor = true
+	}
+
 	infoLogger := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
 		Level:       slog.LevelInfo,
 		ReplaceAttr: replaceAttr,
 	})
-	osStdErrLogger := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+	osStdErrLogger := tint.NewTextHandler(os.Stderr, &tint.Options{
 		Level:       slog.LevelDebug,
 		ReplaceAttr: replaceAttr,
+		NoColor:     enableColor,
 	})
 	logger := slog.New(slog.NewMultiHandler(infoLogger, osStdErrLogger))
 	return logger, close, nil
