@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"boot.dev/linko/internal/store"
+
+	linkerr "boot.dev/linko/internal/linkoerr"
 )
 
 func main() {
@@ -124,19 +126,19 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 		if !ok {
 			return a
 		}
+
+		attrs := []slog.Attr{
+			slog.String("message", err.Error()),
+		}
+		attrs = append(attrs, linkerr.Attrs(err)...)
 		// Slog groups
 		// Check for errors wrapped with pkgerr.WithStackTrace()
 		// that contain a stack trace
 		if stackErr, ok := errors.AsType[stackTracer](err); ok {
-			return slog.GroupAttrs("error", slog.Attr{
-				Key:   "message",
-				Value: slog.StringValue(stackErr.Error()),
-			}, slog.Attr{
-				Key:   "stack_trace",
-				Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
-			})
+			attrs = append(attrs, slog.String("stack_trace", fmt.Sprintf("%+v", stackErr.StackTrace())))
 		}
-		return slog.String("error", fmt.Sprintf("%+v", err))
+		// return slog.String("error", fmt.Sprintf("%+v", err))
+		return slog.GroupAttrs("error", attrs...)
 	}
 	return a
 }
