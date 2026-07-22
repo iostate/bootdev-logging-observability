@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"boot.dev/linko/internal/build"
 	"boot.dev/linko/internal/store"
 
 	linkerr "boot.dev/linko/internal/linkoerr"
@@ -45,6 +46,10 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 	if closeLogger != nil {
 		defer closeLogger()
 	}
+	logger = logger.With(
+		slog.String("git_sha", build.GitSHA),
+		slog.String("build_time", build.BuildTime),
+	)
 
 	st, err := store.New(dataDir, logger)
 	if err != nil {
