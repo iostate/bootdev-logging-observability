@@ -6,8 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
 
@@ -104,13 +106,8 @@ func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
 	)
 
 	handlers = append(handlers, tint.NewTextHandler(os.Stderr, &tint.Options{
-		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				return slog.Time(slog.TimeKey, time.Date(2023, 10, 1, 12, 34, 57, 0, time.UTC))
-			}
-			return a
-		},
-		NoColor: !(isatty.IsTerminal(os.Stdout.Fd())) || isatty.IsCygwinTerminal(os.Stdout.Fd()),
+		ReplaceAttr: replaceAttr,
+		NoColor:     !(isatty.IsTerminal(os.Stdout.Fd())) || isatty.IsCygwinTerminal(os.Stdout.Fd()),
 	}))
 
 	if logFile != "" {
@@ -139,6 +136,27 @@ func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
 }
 
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
+
+	prohibitedKeywords := []string{"password", "key", "apiKey", "secret", "pin", "creditcardno", "user"}
+
+	if a.Key == slog.TimeKey {
+		return slog.Time(slog.TimeKey, time.Date(2023, 10, 1, 12, 34, 57, 0, time.UTC))
+	}
+
+	if slices.Contains(prohibitedKeywords, a.Key) {
+		a.Value = slog.AnyValue("[REDACTED]")
+	}
+
+	if a.Value.Kind() == slog.KindString {
+		u, err := url.Parse(a.Value.String())
+		if err == nil && u.User != nil {
+			if _, hasPassword := u.User.Password(); hasPassword {
+				u.User = url.UserPassword(u.User.Username(), "[REDACTED]")
+				return slog.String(a.Key, u.String())
+			}
+		}
+	}
+
 	if a.Key == "error" {
 
 		err, ok := a.Value.Any().(error)
