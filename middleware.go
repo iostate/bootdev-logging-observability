@@ -5,7 +5,10 @@ import (
 	"crypto/rand"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
+	"strings"
 	"time"
 )
 
@@ -66,7 +69,7 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			attrs := []any{
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
-				slog.String("client_ip", r.RemoteAddr),
+				slog.String("client_ip", redactIP(r.RemoteAddr)),
 				slog.Duration("duration", time.Since(start)),
 				slog.Int("request_body_bytes", spyReader.bytesRead),
 				slog.Int("response_status", spyWriter.statusCode),
@@ -118,4 +121,29 @@ func httpError(ctx context.Context, w http.ResponseWriter, status int, err error
 	}
 
 	http.Error(w, err.Error(), status)
+}
+
+func isNonIPv4(ipStr string) bool {
+	addr, err := netip.ParseAddr(ipStr)
+	if err != nil {
+		// The string is not a valid IP address at all
+		return true
+	}
+	// Returns true if it is a valid IPv6 address
+	return addr.Is6()
+}
+
+func redactIP(address string) string {
+
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return address
+	}
+
+	addr := net.ParseIP(host)
+
+	splits := strings.Split(addr.String(), ".")
+	splits[len(splits)-1] = "x"
+	result := strings.Join(splits, ".")
+	return result
 }
