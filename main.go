@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -16,6 +15,7 @@ import (
 	"boot.dev/linko/internal/store"
 	"github.com/lmittmann/tint"
 	"github.com/mattn/go-isatty"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	linkerr "boot.dev/linko/internal/linkoerr"
 )
@@ -39,8 +39,8 @@ func main() {
 }
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
-
-	logger, closeLogger, err := initializeLogger()
+	logFile := os.Getenv("LINKO_LOG_FILE")
+	logger, closeLogger, err := initializeLogger(logFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
@@ -97,54 +97,45 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 type closeFunc func() error
 
-func initializeLogger() (*slog.Logger, closeFunc, error) {
-	logFile := os.Getenv("LINKO_LOG_FILE")
-	if logFile == "" {
-		fmt.Println("No LINKO_LOG_FILE env variable found")
+func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
+	var (
+		handlers []slog.Handler
+		closers  []closeFunc
+	)
 
-		logger := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level:       slog.LevelDebug,
+	handlers = append(handlers, tint.NewTextHandler(os.Stderr, &tint.Options{
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.Time(slog.TimeKey, time.Date(2023, 10, 1, 12, 34, 57, 0, time.UTC))
+			}
+			return a
+		},
+		NoColor: !(isatty.IsTerminal(os.Stdout.Fd())) || isatty.IsCygwinTerminal(os.Stdout.Fd()),
+	}))
+
+	if logFile != "" {
+		fileLogger := &lumberjack.Logger{
+			Filename:   logFile,
+			MaxSize:    1,
+			MaxAge:     28,
+			MaxBackups: 10,
+			LocalTime:  false,
+			Compress:   true,
+		}
+		handlers = append(handlers, slog.NewJSONHandler(fileLogger, &slog.HandlerOptions{
 			ReplaceAttr: replaceAttr,
-		})
-		return slog.New(logger), func() error { return nil }, nil
+		}))
+		closers = append(closers, fileLogger.Close)
 	}
-
-	fmt.Println("LINKO_LOG_FILE env variable found")
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	bufferedFile := bufio.NewWriterSize(f, 8192)
 
 	close := func() error {
-		if err := bufferedFile.Flush(); err != nil {
-			return err
+		var errs []error
+		for _, closer := range closers {
+			errs = append(errs, closer())
 		}
-		return f.Close()
+		return errors.Join(errs...)
 	}
-
-	enableColor := false
-	// Are we in a TTY environment?
-	isTty := isatty.IsTerminal(os.Stdout.Fd())
-	if isTty == false {
-		enableColor = false
-	}
-	if isatty.IsCygwinTerminal(os.Stdout.Fd()) || isatty.IsTerminal(os.Stdout.Fd()) {
-		enableColor = true
-	}
-
-	infoLogger := slog.NewJSONHandler(bufferedFile, &slog.HandlerOptions{
-		Level:       slog.LevelInfo,
-		ReplaceAttr: replaceAttr,
-	})
-	osStdErrLogger := tint.NewTextHandler(os.Stderr, &tint.Options{
-		Level:       slog.LevelDebug,
-		ReplaceAttr: replaceAttr,
-		NoColor:     enableColor,
-	})
-	logger := slog.New(slog.NewMultiHandler(infoLogger, osStdErrLogger))
-	return logger, close, nil
+	return slog.New(slog.NewMultiHandler(handlers...)), close, nil
 }
 
 func replaceAttr(groups []string, a slog.Attr) slog.Attr {
