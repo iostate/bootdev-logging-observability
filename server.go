@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"os"
 
 	"boot.dev/linko/internal/store"
@@ -34,6 +35,10 @@ func newServer(store store.Store, port int, cancel context.CancelFunc, logger *s
 		cancel:     cancel,
 		logger:     logger,
 	}
+
+	// PProf - profiling
+	mux.Handle("GET /debug/pprof/profile", s.authMiddleware(http.HandlerFunc(pprof.Profile)))
+	mux.Handle("GET /debug/pprof/", s.authMiddleware(http.HandlerFunc(pprof.Index)))
 
 	mux.HandleFunc("GET /", s.handlerIndex)
 	mux.Handle("GET /metrics", promhttp.Handler())
