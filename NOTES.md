@@ -36,3 +36,5 @@ Events are timestamped annotations on a span. They indicate something noteworthy
 ## Spans
 Spans use a three-value system: UNSET, OK, ERROR.
 Default setting for a span is UNSET. Can explicitly change a span's status to OK or ERROR.
+
+
