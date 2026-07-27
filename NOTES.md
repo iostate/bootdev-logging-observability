@@ -23,3 +23,16 @@ Use []slog.Attr slice to build attributes
 
 # Notes 
 - Some logs are errors, most errors are logs.
+
+# Traces
+Each trace has at least one span, the root span. A root span typically has one or more child spans, which in turn may have:
+    - A unique ID
+    - A name (e.g. "HTTP GET /login")
+    - A start and end time
+    - Optional metadata such as status, attributes, and events
+
+Events are timestamped annotations on a span. They indicate something noteworthy happened within a span.
+
+## Spans
+Spans use a three-value system: UNSET, OK, ERROR.
+Default setting for a span is UNSET. Can explicitly change a span's status to OK or ERROR.

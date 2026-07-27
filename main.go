@@ -42,6 +42,14 @@ func main() {
 
 func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir string) int {
 	logFile := os.Getenv("LINKO_LOG_FILE")
+
+	tracer, err := initTracing(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	defer tracer(context.Background())
+
 	logger, closeLogger, err := initializeLogger(logFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
